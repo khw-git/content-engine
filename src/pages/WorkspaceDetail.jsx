@@ -747,10 +747,41 @@ const COLOUR_OPTIONS = [
   { value: 'gray', label: 'Grey', cls: 'bg-gray-100 text-gray-700' },
 ]
 
+const STYLE_TEMPLATES = [
+  // Client styles (Format)
+  { category: 'Format', subcategory: 'Pain', subcategory_key: 'pain', guidance: 'Identify an ICP pain point and agitate the problem. Make the reader feel seen. No solution selling - just nail the problem.', colour: 'red' },
+  { category: 'Format', subcategory: 'Proof', subcategory_key: 'proof', guidance: 'Results, case studies, specific numbers. Show do not tell. Concrete outcomes with context.', colour: 'green' },
+  { category: 'Format', subcategory: 'Behind the Scenes', subcategory_key: 'bts', guidance: 'Process, how we do things, operational transparency. Pull back the curtain on real work.', colour: 'yellow' },
+  { category: 'Format', subcategory: 'Insight', subcategory_key: 'insight', guidance: 'Hot take, industry observation, contrarian POV. Paragraph-based style. Take a strong position.', colour: 'blue' },
+  // Pipeline
+  { category: 'Pipeline', subcategory: 'Decision Story', subcategory_key: 'decision_story', guidance: 'I almost did X. Here is why I did not. Walk through a real decision - the reasoning, what you did instead, the numbers that validated the alternative path. The insight emerges from the story. Never state the lesson as a headline - let the reader extract it themselves.', colour: 'red' },
+  { category: 'Pipeline', subcategory: 'Operational Walkthrough', subcategory_key: 'operational_walkthrough', guidance: 'Step-by-step, timestamped, showing how work actually happens. No abstraction - just what I did at 7:30, what I did at 8:00, what I did at 8:15. The power is in the mundane specificity. The reader realises their own workflow is broken by watching someone else work cleanly.', colour: 'red' },
+  { category: 'Pipeline', subcategory: 'Strategic Reasoning', subcategory_key: 'strategic_reasoning', guidance: 'Why I made this choice. Explain the thinking behind a strategic decision with full context. Low engagement, high trust. These attract operators and strategic thinkers, not spectators.', colour: 'red' },
+  // Authority
+  { category: 'Authority', subcategory: 'Market Thesis', subcategory_key: 'market_thesis', guidance: 'Broad observation about the market, then build an original argument, then ground it in your personal play. Reference other thinkers by name. These are rare - maybe 1 in 10 posts. They land because everything else is operational, so when you go philosophical the reader trusts the depth.', colour: 'blue' },
+  { category: 'Authority', subcategory: 'Curated Value', subcategory_key: 'curated_value', guidance: 'I consumed everything so you do not have to. Here are the ones that matter. Position as the filter. Authority through curation, not creation. Include personal context on why each item matters.', colour: 'blue' },
+  { category: 'Authority', subcategory: 'Momentum Narration', subcategory_key: 'momentum_narration', guidance: 'I did not expect this to blow up. Overwhelming proof delivered conversationally. Only works when there is a real moment to narrate - a launch, a milestone, unexpected traction. Not manufacturable weekly. The soft CTA feels earned because the proof is so strong.', colour: 'blue' },
+  // Audience Capture
+  { category: 'Audience Capture', subcategory: 'Comment-Gate', subcategory_key: 'comment_gate', guidance: '80% value in the post, resource gated behind a keyword comment. High comment count, captures leads into a deliverable. The post must deliver genuine insight on its own - the gated resource is a bonus, not the whole point.', colour: 'purple' },
+  { category: 'Audience Capture', subcategory: 'Event Driver', subcategory_key: 'event_driver', guidance: 'Webinar, live session, launch announcement. Direct registration CTA. Works best when paired with a build-in-public arc that created anticipation. Keep it conversational, not promotional.', colour: 'purple' },
+  // Brand
+  { category: 'Brand', subcategory: 'Build-in-Public', subcategory_key: 'build_in_public', guidance: 'Real-time progress updates on something being built. Milestones, setbacks, specific numbers. The reader watches the journey unfold. Hook is always a specific milestone. Ending is always forward-looking. No lesson, no framework - just momentum.', colour: 'green' },
+  { category: 'Brand', subcategory: 'Origin / Brand Story', subcategory_key: 'origin_story', guidance: 'Why something exists, how it started, the meaning behind a choice. Longer, narrative, uses section breaks. The insight is in the why, not the what.', colour: 'green' },
+  { category: 'Brand', subcategory: 'Shitpost', subcategory_key: 'shitpost', guidance: '3-8 lines. Genuinely funny. Self-deprecating. No lesson, no CTA. Exists to break rhythm and show the human. Dry humour specific to the audience.', colour: 'green' },
+]
+
+// Group templates by category for the picker UI
+const TEMPLATE_GROUPS = STYLE_TEMPLATES.reduce((acc, t) => {
+  if (!acc[t.category]) acc[t.category] = []
+  acc[t.category].push(t)
+  return acc
+}, {})
+
 function ContentStylesTab({ workspaceId, saving, setSaving, showMessage }) {
   const [styles, setStyles] = useState([])
   const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
+  // UI mode: null = list, 'pick' = template picker, 'form' = edit/custom form
+  const [mode, setMode] = useState(null)
   const [editingId, setEditingId] = useState(null)
   const [category, setCategory] = useState('')
   const [subcategory, setSubcategory] = useState('')
@@ -758,6 +789,8 @@ function ContentStylesTab({ workspaceId, saving, setSaving, showMessage }) {
   const [guidance, setGuidance] = useState('')
   const [colour, setColour] = useState('gray')
   const [sortOrder, setSortOrder] = useState(0)
+  // Guided custom flow step: 1 = category, 2 = name, 3 = guidance
+  const [customStep, setCustomStep] = useState(0)
 
   const fetchStyles = async () => {
     const { data } = await supabase
@@ -778,8 +811,9 @@ function ContentStylesTab({ workspaceId, saving, setSaving, showMessage }) {
     setGuidance('')
     setColour('gray')
     setSortOrder(styles.length + 1)
-    setShowForm(false)
+    setMode(null)
     setEditingId(null)
+    setCustomStep(0)
   }
 
   const autoKey = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
@@ -817,7 +851,8 @@ function ContentStylesTab({ workspaceId, saving, setSaving, showMessage }) {
     setGuidance(s.guidance)
     setColour(s.colour)
     setSortOrder(s.sort_order)
-    setShowForm(true)
+    setCustomStep(0)
+    setMode('form')
   }
 
   const handleDelete = async (id) => {
@@ -827,31 +862,36 @@ function ContentStylesTab({ workspaceId, saving, setSaving, showMessage }) {
     fetchStyles()
   }
 
-  const addPreset = async (preset) => {
-    setSaving(true)
-    const existing = styles.map(s => s.subcategory_key)
-    let order = styles.length
-    for (const item of preset) {
-      if (!existing.includes(item.subcategory_key)) {
-        order++
-        await supabase.from('content_styles').insert({
-          workspace_id: workspaceId,
-          ...item,
-          sort_order: order,
-        })
-      }
-    }
-    setSaving(false)
-    showMessage('Preset styles added')
-    fetchStyles()
+  const selectTemplate = (template) => {
+    setCategory(template.category)
+    setSubcategory(template.subcategory)
+    setSubcategoryKey(template.subcategory_key)
+    setGuidance(template.guidance)
+    setColour(template.colour)
+    setSortOrder(styles.length + 1)
+    setCustomStep(0)
+    setMode('form')
   }
 
-  const PRESET_CLASSIC = [
-    { category: 'Format', subcategory: 'Pain', subcategory_key: 'pain', guidance: 'Identify an ICP pain point and agitate the problem. Make the reader feel seen. No solution selling - just nail the problem.', colour: 'red' },
-    { category: 'Format', subcategory: 'Proof', subcategory_key: 'proof', guidance: 'Results, case studies, specific numbers. Show do not tell. Concrete outcomes with context.', colour: 'green' },
-    { category: 'Format', subcategory: 'Behind the Scenes', subcategory_key: 'bts', guidance: 'Process, how we do things, operational transparency. Pull back the curtain on real work.', colour: 'yellow' },
-    { category: 'Format', subcategory: 'Insight', subcategory_key: 'insight', guidance: 'Hot take, industry observation, contrarian POV. Paragraph-based style. Take a strong position.', colour: 'blue' },
-  ]
+  const startCustom = () => {
+    setCategory('')
+    setSubcategory('')
+    setSubcategoryKey('')
+    setGuidance('')
+    setColour('gray')
+    setSortOrder(styles.length + 1)
+    setCustomStep(1)
+    setMode('form')
+  }
+
+  // Filter out templates already added to this workspace
+  const existingKeys = styles.map(s => s.subcategory_key)
+  const availableTemplates = STYLE_TEMPLATES.filter(t => !existingKeys.includes(t.subcategory_key))
+  const availableGroups = availableTemplates.reduce((acc, t) => {
+    if (!acc[t.category]) acc[t.category] = []
+    acc[t.category].push(t)
+    return acc
+  }, {})
 
   if (loading) return <div className="text-gray-500">Loading...</div>
 
@@ -871,22 +911,12 @@ function ContentStylesTab({ workspaceId, saving, setSaving, showMessage }) {
           <h3 className="text-sm font-medium text-gray-700">Content Styles</h3>
           <p className="text-xs text-gray-400 mt-0.5">Define the types of content that can be generated for this workspace</p>
         </div>
-        <div className="flex gap-2">
-          {styles.length === 0 && (
-            <button
-              onClick={() => addPreset(PRESET_CLASSIC)}
-              className="px-3 py-1.5 text-sm text-indigo-600 border border-indigo-300 rounded-md hover:bg-indigo-50"
-            >
-              Add Pain/Proof/BTS/Insight
-            </button>
-          )}
-          <button
-            onClick={() => { resetForm(); setSortOrder(styles.length + 1); setShowForm(true) }}
-            className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
-          >
-            Add Style
-          </button>
-        </div>
+        <button
+          onClick={() => { resetForm(); setMode('pick') }}
+          className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+        >
+          Add Style
+        </button>
       </div>
 
       {/* Existing styles grouped by category */}
@@ -916,16 +946,67 @@ function ContentStylesTab({ workspaceId, saving, setSaving, showMessage }) {
         </div>
       ))}
 
-      {styles.length === 0 && !showForm && (
+      {styles.length === 0 && !mode && (
         <div className="text-center py-8 text-sm text-gray-400">
-          No content styles configured. Add styles or use a preset to get started.
+          No content styles configured. Click "Add Style" to get started.
         </div>
       )}
 
-      {/* Add/Edit form */}
-      {showForm && (
+      {/* Template picker */}
+      {mode === 'pick' && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="text-sm font-medium text-gray-700">Choose a style to add</h4>
+              <p className="text-xs text-gray-400 mt-0.5">Pick a pre-built style or create your own from scratch</p>
+            </div>
+            <button onClick={resetForm} className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1">Cancel</button>
+          </div>
+
+          {availableTemplates.length > 0 && (
+            <div className="space-y-3">
+              {Object.entries(availableGroups).map(([cat, templates]) => (
+                <div key={cat}>
+                  <p className="text-xs font-medium text-gray-500 mb-1.5">{cat}</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {templates.map(t => (
+                      <button
+                        key={t.subcategory_key}
+                        onClick={() => selectTemplate(t)}
+                        className="text-left p-3 bg-white border border-gray-200 rounded-lg hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${colourCls(t.colour)}`}>{t.subcategory}</span>
+                        </div>
+                        <p className="text-xs text-gray-500 line-clamp-2">{t.guidance}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {availableTemplates.length === 0 && (
+            <p className="text-xs text-gray-400">All pre-built styles have been added to this workspace.</p>
+          )}
+
+          <div className="border-t border-gray-200 pt-3">
+            <button
+              onClick={startCustom}
+              className="w-full p-3 text-left bg-white border border-dashed border-gray-300 rounded-lg hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
+            >
+              <span className="text-sm font-medium text-indigo-600">Create custom style</span>
+              <p className="text-xs text-gray-400 mt-0.5">Define a new content style from scratch with guided setup</p>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Add/Edit form - direct edit or template pre-filled */}
+      {mode === 'form' && customStep === 0 && (
         <form onSubmit={handleSubmit} className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
-          <h4 className="text-sm font-medium text-gray-700">{editingId ? 'Edit Style' : 'New Style'}</h4>
+          <h4 className="text-sm font-medium text-gray-700">{editingId ? 'Edit Style' : 'Add Style'}</h4>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -994,7 +1075,154 @@ function ContentStylesTab({ workspaceId, saving, setSaving, showMessage }) {
 
           <div className="flex gap-2">
             <button type="submit" disabled={saving} className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 disabled:opacity-50">
-              {saving ? 'Saving...' : editingId ? 'Update Style' : 'Create Style'}
+              {saving ? 'Saving...' : editingId ? 'Update Style' : 'Add Style'}
+            </button>
+            <button type="button" onClick={resetForm} className="px-4 py-2 text-gray-600 text-sm rounded-md hover:bg-gray-100">
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Guided custom flow - Step 1: Category */}
+      {mode === 'form' && customStep === 1 && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-medium text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded">Step 1 of 3</span>
+              <span className="text-sm font-medium text-gray-700">What category does this style belong to?</span>
+            </div>
+            <p className="text-xs text-gray-400">Categories group related styles together. Pick an existing one or type a new name.</p>
+          </div>
+
+          <div>
+            <input
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+              placeholder="e.g. Pipeline, Format, Authority, Audience Capture"
+              list="custom-category-suggestions"
+              autoFocus
+            />
+            <datalist id="custom-category-suggestions">
+              {[...new Set([...styles.map(s => s.category), ...Object.keys(TEMPLATE_GROUPS)])].map(c => <option key={c} value={c} />)}
+            </datalist>
+          </div>
+
+          {/* Quick-pick existing categories */}
+          {[...new Set([...styles.map(s => s.category), ...Object.keys(TEMPLATE_GROUPS)])].length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {[...new Set([...styles.map(s => s.category), ...Object.keys(TEMPLATE_GROUPS)])].map(c => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setCategory(c)}
+                  className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${category === c ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => { if (category.trim()) setCustomStep(2) }}
+              disabled={!category.trim()}
+              className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 disabled:opacity-50"
+            >
+              Next
+            </button>
+            <button type="button" onClick={resetForm} className="px-4 py-2 text-gray-600 text-sm rounded-md hover:bg-gray-100">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Guided custom flow - Step 2: Name + Key + Colour */}
+      {mode === 'form' && customStep === 2 && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-medium text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded">Step 2 of 3</span>
+              <span className="text-sm font-medium text-gray-700">Name your content style</span>
+            </div>
+            <p className="text-xs text-gray-400">Adding to <span className="font-medium text-gray-600">{category}</span>. Give it a clear, descriptive name.</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Style name</label>
+              <input
+                value={subcategory}
+                onChange={(e) => { setSubcategory(e.target.value); setSubcategoryKey(autoKey(e.target.value)) }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                placeholder="e.g. Decision Story, Hot Take, Build-in-Public"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Colour</label>
+              <select value={colour} onChange={(e) => setColour(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                {COLOUR_OPTIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {subcategoryKey && (
+            <p className="text-xs text-gray-400">Key: <span className="font-mono text-gray-500">{subcategoryKey}</span></p>
+          )}
+
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setCustomStep(1)} className="px-4 py-2 text-gray-600 text-sm rounded-md hover:bg-gray-100">
+              Back
+            </button>
+            <button
+              onClick={() => { if (subcategory.trim()) setCustomStep(3) }}
+              disabled={!subcategory.trim()}
+              className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 disabled:opacity-50"
+            >
+              Next
+            </button>
+            <button type="button" onClick={resetForm} className="px-4 py-2 text-gray-600 text-sm rounded-md hover:bg-gray-100">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Guided custom flow - Step 3: Guidance */}
+      {mode === 'form' && customStep === 3 && (
+        <form onSubmit={handleSubmit} className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-medium text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded">Step 3 of 3</span>
+              <span className="text-sm font-medium text-gray-700">Write the generation guidance</span>
+            </div>
+            <p className="text-xs text-gray-400">
+              Creating <span className={`font-medium px-1 py-0.5 rounded ${colourCls(colour)}`}>{subcategory}</span> in <span className="font-medium text-gray-600">{category}</span>. Describe what this style should achieve - this text is included in the AI prompt when generating content.
+            </p>
+          </div>
+
+          <div>
+            <textarea
+              value={guidance}
+              onChange={(e) => setGuidance(e.target.value)}
+              rows={5}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+              placeholder="Describe the tone, structure, and purpose of this content style. What should the post achieve? What makes it different from other styles? Be specific - this is the instruction the AI follows."
+              autoFocus
+            />
+            <p className="text-xs text-gray-400 mt-1">Tip: Be specific about tone, structure, and what makes this style unique. The more detail you give, the better the generated content will match your vision.</p>
+          </div>
+
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setCustomStep(2)} className="px-4 py-2 text-gray-600 text-sm rounded-md hover:bg-gray-100">
+              Back
+            </button>
+            <button type="submit" disabled={saving || !guidance.trim()} className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 disabled:opacity-50">
+              {saving ? 'Saving...' : 'Create Style'}
             </button>
             <button type="button" onClick={resetForm} className="px-4 py-2 text-gray-600 text-sm rounded-md hover:bg-gray-100">
               Cancel
